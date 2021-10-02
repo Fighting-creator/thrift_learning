@@ -1,1 +1,1 @@
-Linux——thrift
+## Linux之thrift
