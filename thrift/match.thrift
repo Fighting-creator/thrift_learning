@@ -7,7 +7,9 @@ struct User {
 }
 
 service Match {
+    #add_user：在匹配池中添加几个玩家
     i32 add_user(1: User user, 2: string info),
 
+    #remove_user：从匹配池中取消掉玩家
     i32 remove_user(1: User user, 2: string info),
 }
