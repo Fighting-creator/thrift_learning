@@ -11,6 +11,7 @@
 #include <thrift/transport/TTransportUtils.h>
 
 #include <iostream>
+#include <algorithm>
 #include <thread> //C++中有一个thread的库，是用来开线程。
 #include <mutex> //锁
 #include <condition_variable> //条件变量，对锁进行封装。
@@ -59,7 +60,10 @@ class Pool
             try {
                 transport->open();
 
-                client.save_data("acs_468", "e75e214f", a, b);
+                int res = client.save_data("acs_468", "e75e214f", a, b);
+
+                if (!res) puts("success");
+                else puts("failed");
 
                 transport->close();
             } catch (TException& tx) {
@@ -72,11 +76,26 @@ class Pool
         {
             while (users.size() > 1)
             {
-                auto a = users[0], b = users[1];
-                users.erase(users.begin());
-                users.erase(users.begin());
+                sort(users.begin(), users.end(), [&](User a, User b){
+                            return a.score < b.score;
+                        });
 
-                save_result(a.id, b.id);
+                bool flag = true;
+                for (uint32_t i = 1; i < users.size(); i ++)
+                {
+                    auto a = users[i - 1], b = users[i];
+                    if (b.score - a.score <= 50)
+                    {
+                        //这个erase是一个左闭右开的区间
+                        users.erase(users.begin() + i - 1, users.begin() + i + 1);
+                        save_result(a.id, b.id);
+
+                        flag = false;
+                        break;
+                    }
+                }
+                //没有玩家匹配时，退出循环。
+                if (flag) break;
             }
         }
 
@@ -153,7 +172,15 @@ void consume_task()
              * 所以使用条件变量的wait()函数可使得当前线程阻塞，直至条件变量唤醒。
              * 当线程阻塞的时候，该函数会自动解锁，允许其他线程执行。
              */
-            message_queue.cv.wait(lck);
+            // message_queue.cv.wait(lck);
+
+            /* 每一秒匹配一次。
+             * 这样消费者线程（不止一个）不会频繁判断队列是否为空，导致CPU做无用功。
+             * 然后实现匹配的过程中，还在向队列中加人或减人。
+             */
+            lck.unlock();
+            pool.match();
+            sleep(1);
         }
         else
         {
